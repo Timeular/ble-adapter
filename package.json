@@ -1,0 +1,16 @@
+{
+  "main": "lib/binding.js",
+  "dependencies": {
+    "bindings": "^1.3.0",
+    "nan": "^2.10.0"
+  },
+  "scripts": {
+    "test": "node ./test/test_binding.js"
+  },
+  "gypfile": true,
+  "name": "ble-adapter",
+  "version": "1.0.0",
+  "author": "",
+  "license": "ISC",
+  "description": ""
+}
