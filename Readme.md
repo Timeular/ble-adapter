@@ -6,7 +6,7 @@ Get a list of installed Bluetooth adapters and if they support Bluetooth 4.0 (BL
 ## Doc
 
 ```typescript
-interface  Adapter { name: string, manufacturer: string, bleCapable: boolean }
+interface  Adapter { name: string, manufacturer: string, bleCapable: boolean, isConnected: boolean, hasProblem: boolean }
 // returns a list of available bluetooth adapters
 BleAdapter.list() : Array< Adapter >   
 ```

@@ -104,6 +104,20 @@ bool IsBLECapable(DEVINST deviceInstance)
     return false;
 }
 
+bool IsConnected(const SP_DEVINFO_DATA& devInfo, bool* hasProblem)
+{
+    *hasProblem = false;
+
+    DWORD status = 0; // DN_ eg. DN_HAS_PROBLEM
+    DWORD problemNumber = 0; // CM_PROB_ eg. CM_PROB_FAILED_START
+    DWORD ret = CM_Get_DevNode_Status(&status, &problemNumber, devInfo.DevInst, 0);
+    if ((status & DN_HAS_PROBLEM) != 0)
+    {
+        *hasProblem = true;
+    }
+    return ret == CR_SUCCESS;
+}
+
 #define PROP_STRING(obj, type, name, value) \
         do \
         { \
@@ -121,14 +135,15 @@ bool IsBLECapable(DEVINST deviceInstance)
            Nan::Set(obj, prop_name, prop_value); \
         } while(0)
 
-NAN_METHOD(list) 
+NAN_METHOD(list)
 {
     v8::Local<v8::Array> radioList = Nan::New<v8::Array>();
     int radioIndex = 0;
     HDEVINFO hDevInfo = SetupDiGetClassDevsEx(&GUID_BTHPORT_DEVICE_INTERFACE, nullptr, nullptr,
-                                              DIGCF_DEVICEINTERFACE | DIGCF_PRESENT, nullptr, nullptr, nullptr);
+                                              DIGCF_DEVICEINTERFACE, nullptr, nullptr, nullptr);
     if (hDevInfo == INVALID_HANDLE_VALUE)
     {
+        printf("SetupDiGetClassDevsEx failed with error %d\n", GetLastError());
         info.GetReturnValue().Set(radioList);
         return;
     }
@@ -136,6 +151,8 @@ NAN_METHOD(list)
     devInfo.cbSize = sizeof(devInfo);
     for (DWORD devIndex = 0; SetupDiEnumDeviceInfo(hDevInfo, devIndex, &devInfo) != FALSE; devIndex++)
     {
+        bool hasProblem = false;
+        bool isConnected = IsConnected(devInfo, &hasProblem);
         std::string name = GetProperty(hDevInfo, &devInfo, SPDRP_DEVICEDESC);
         std::string manufacturer = GetProperty(hDevInfo, &devInfo, SPDRP_MFG);
         bool isBLECapable = IsBLECapable(devInfo.DevInst);
@@ -143,6 +160,8 @@ NAN_METHOD(list)
         PROP_STRING(adapter, v8::String, "name", name);
         PROP_STRING(adapter, v8::String, "manufacturer", manufacturer);
         PROP(adapter, v8::Boolean, "bleCapable", isBLECapable);
+        PROP(adapter, v8::Boolean, "isConnected", isConnected);
+        PROP(adapter, v8::Boolean, "hasProblem", hasProblem);
         Nan::Set(radioList, radioIndex, adapter);
         radioIndex++;
     }
