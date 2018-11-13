@@ -32,6 +32,68 @@ static std::string GetProperty(HDEVINFO hDevInfo, PSP_DEVINFO_DATA deviceInfoDat
     std::string ret;
     switch (dataType)
     {
+    case REG_SZ:
+    {
+        ret = std::string(&buffer[0]);
+        break;
+    }
+    case REG_MULTI_SZ:
+    {
+        TCHAR* start = &buffer[0];
+        std::stringstream wss1;
+        wss1.write(start, lstrlen(start));
+        start += lstrlen(start) + 1;
+        while (*start != '\0')
+        {
+            wss1 << std::endl;
+            wss1.write(start, lstrlen(start));
+            start += lstrlen(start) + 1;
+        }
+        ret = wss1.str();
+        break;
+    }
+    case REG_DWORD:
+    {
+        std::stringstream wss2;
+        wss2 << *reinterpret_cast<PDWORD>(&buffer[0]);
+        ret = wss2.str();
+        break;
+    }
+    case REG_QWORD:
+    {
+        std::stringstream wss3;
+        wss3 << *reinterpret_cast<uint64_t*>(&buffer[0]);
+        ret = wss3.str();
+        break;
+    }
+    default:
+        ret = "not handled";
+        break;
+    }
+    return ret;
+}
+
+static std::string GetProperty(DEVINST devInst, DWORD property)
+{
+    DWORD buffersize = 0;
+    DWORD dataType;
+
+    CONFIGRET result = CM_Get_DevNode_Registry_Property(devInst, property, &dataType, nullptr, &buffersize, 0);
+    // we should get an insufficent buffer error here in order for buffersize to be set
+    if (result != CR_BUFFER_SMALL)
+    {
+        return std::string();
+    }
+
+    std::vector<char> buffer(buffersize);
+    result = CM_Get_DevNode_Registry_Property(devInst, property, &dataType, &buffer[0], &buffersize, 0);
+    if (result != CR_SUCCESS)
+    {
+        return std::string();
+    }
+    std::string ret;
+    switch (dataType)
+    {
         case REG_SZ:
         {
             ret = std::string(&buffer[0]);
@@ -73,7 +135,7 @@ static std::string GetProperty(HDEVINFO hDevInfo, PSP_DEVINFO_DATA deviceInfoDat
     return ret;
 }
 
-bool IsBLECapable(DEVINST deviceInstance) 
+bool IsBLECapable(DEVINST deviceInstance)
 {
     DEVINST devInst = 0;
     DEVINST devNext = 0;
@@ -83,15 +145,11 @@ bool IsBLECapable(DEVINST deviceInstance)
         return false;
     }
     devInst = devNext;
-
-    TCHAR buf[512];
-    DWORD dataType;
-    DWORD size = 512;
     while (true)
     {
-        cr = CM_Get_DevNode_Registry_Property(devInst, CM_DRP_DEVICEDESC, &dataType, buf, &size, 0);
-        if (cr == CR_SUCCESS && strcmp(buf, "Microsoft Bluetooth LE Enumerator") == 0)
-        {
+        std::string hardwareID = GetProperty(devInst, CM_DRP_HARDWAREID);
+        std::string service = GetProperty(devInst, CM_DRP_SERVICE);
+        if (hardwareID == "BTH\\MS_BTHLE" && service == "BthLEEnum") {
             return true;
         }
         cr = CM_Get_Sibling(&devNext, devInst, 0);
