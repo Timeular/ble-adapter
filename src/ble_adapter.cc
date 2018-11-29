@@ -1,12 +1,58 @@
 #include <nan.h>
 
+#define INITGUID
 #include <cfgmgr32.h>
 #include <devguid.h>
 #include <bluetoothapis.h>
 #include <SetupAPI.h>
 #include <sstream>
+#include <initguid.h>
 
 #pragma comment(lib, "setupapi")
+
+typedef BOOL (WINAPI *FN_SetupDiGetDevicePropertyW)(
+  __in       HDEVINFO DeviceInfoSet,
+  __in       PSP_DEVINFO_DATA DeviceInfoData,
+  __in       const DEVPROPKEY *PropertyKey,
+  __out      DEVPROPTYPE *PropertyType,
+  __out_opt  PBYTE PropertyBuffer,
+  __in       DWORD PropertyBufferSize,
+  __out_opt  PDWORD RequiredSize,
+  __in       DWORD Flags
+);
+
+// not sure if the association is right, maybe LMP version is 6 and HCIversion is 4
+DEFINE_DEVPROPKEY(DEVPKEY_DeviceContainer_BluetoothRadioLMPVersion, 0xa92f26ca, 0xeda7, 0x4b1d,
+    0x9d, 0xb2, 0x27, 0xb6, 0x8a, 0xa5, 0xa2, 0xeb, 4); // BYTE
+DEFINE_DEVPROPKEY(DEVPKEY_DeviceContainer_BluetoothRadioHCIVersion, 0xa92f26ca, 0xeda7, 0x4b1d,
+    0x9d, 0xb2, 0x27, 0xb6, 0x8a, 0xa5, 0xa2, 0xeb, 6); // BYTE
+
+BYTE GetByteProperty(HDEVINFO hDevInfo, PSP_DEVINFO_DATA devInfo, DEVPROPKEY key, BYTE defaultValue)
+{
+    FN_SetupDiGetDevicePropertyW fn_SetupDiGetDevicePropertyW = (FN_SetupDiGetDevicePropertyW)
+        GetProcAddress(GetModuleHandle(TEXT("Setupapi.dll")), "SetupDiGetDevicePropertyW");
+
+    DEVPROPTYPE devicePropertyType;
+    DWORD required = 0;
+    BOOL success = fn_SetupDiGetDevicePropertyW && fn_SetupDiGetDevicePropertyW(hDevInfo, devInfo, &key, &devicePropertyType, nullptr,
+        0, &required, 0);
+    if (!success && GetLastError() != ERROR_INSUFFICIENT_BUFFER)
+    {
+        return defaultValue;
+    }
+
+    std::vector<WCHAR> data(required);
+    if (!fn_SetupDiGetDevicePropertyW || !fn_SetupDiGetDevicePropertyW(hDevInfo, devInfo, &key, &devicePropertyType,
+        reinterpret_cast<BYTE*>(&data[0]), required, nullptr, 0))
+    {
+        return defaultValue;
+    }
+    if (devicePropertyType == DEVPROP_TYPE_BYTE)
+    {
+        return *reinterpret_cast<BYTE*>(&data[0]);
+    }
+    return defaultValue;
+}
 
 static std::string GetProperty(HDEVINFO hDevInfo, PSP_DEVINFO_DATA deviceInfoData, DWORD property)
 {
@@ -135,31 +181,37 @@ static std::string GetProperty(DEVINST devInst, DWORD property)
     return ret;
 }
 
-bool IsBLECapable(DEVINST deviceInstance)
+bool IsBLECapable(HDEVINFO hDevInfo, PSP_DEVINFO_DATA devInfo)
 {
     DEVINST devInst = 0;
     DEVINST devNext = 0;
-    CONFIGRET cr = CM_Get_Child(&devNext, deviceInstance, 0);
-    if (cr != CR_SUCCESS)
+    CONFIGRET cr = CM_Get_Child(&devNext, devInfo->DevInst, 0);
+    // first check if the bluetooth le enumerator is available
+    if (cr == CR_SUCCESS)
     {
-        return false;
-    }
-    devInst = devNext;
-    while (true)
-    {
-        std::string hardwareID = GetProperty(devInst, CM_DRP_HARDWAREID);
-        std::string service = GetProperty(devInst, CM_DRP_SERVICE);
-        if (hardwareID == "BTH\\MS_BTHLE" && service == "BthLEEnum") {
-            return true;
-        }
-        cr = CM_Get_Sibling(&devNext, devInst, 0);
-        if (cr != CR_SUCCESS)
-        {
-            break;
-        }
         devInst = devNext;
+        while (true)
+        {
+            std::string hardwareID = GetProperty(devInst, CM_DRP_HARDWAREID);
+            std::string service = GetProperty(devInst, CM_DRP_SERVICE);
+            if (hardwareID == "BTH\\MS_BTHLE" && service == "BthLEEnum")
+            {
+                return true;
+            }
+            cr = CM_Get_Sibling(&devNext, devInst, 0);
+            if (cr != CR_SUCCESS)
+            {
+                break;
+            }
+            devInst = devNext;
+        }
     }
-    return false;
+
+    BYTE lmpVersion =
+        GetByteProperty(hDevInfo, devInfo, DEVPKEY_DeviceContainer_BluetoothRadioLMPVersion, 0);
+    BYTE hciVersion =
+        GetByteProperty(hDevInfo, devInfo, DEVPKEY_DeviceContainer_BluetoothRadioHCIVersion, 0);
+    return lmpVersion >= 6 && hciVersion >= 6;
 }
 
 bool IsConnected(const SP_DEVINFO_DATA& devInfo, bool* hasProblem)
@@ -213,7 +265,7 @@ NAN_METHOD(list)
         bool isConnected = IsConnected(devInfo, &hasProblem);
         std::string name = GetProperty(hDevInfo, &devInfo, SPDRP_DEVICEDESC);
         std::string manufacturer = GetProperty(hDevInfo, &devInfo, SPDRP_MFG);
-        bool isBLECapable = IsBLECapable(devInfo.DevInst);
+        bool isBLECapable = IsBLECapable(hDevInfo, &devInfo);
         v8::Local<v8::Object> adapter = Nan::New<v8::Object>();
         PROP_STRING(adapter, v8::String, "name", name);
         PROP_STRING(adapter, v8::String, "manufacturer", manufacturer);
