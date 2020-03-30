@@ -3,7 +3,7 @@
   "dependencies": {
     "bindings": "1.5.0",
     "nan": "2.14.0",
-    "prebuild-install": "5.3.0"
+    "prebuild-install": "5.3.3"
   },
   "scripts": {
     "install": "prebuild-install --force || node-gyp rebuild",
@@ -11,7 +11,7 @@
   },
   "gypfile": true,
   "name": "ble-adapter",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "author": "",
   "license": "ISC",
   "description": "",
