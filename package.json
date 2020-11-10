@@ -1,12 +1,10 @@
 {
   "main": "lib/binding.js",
-  "dependencies": {
-    "bindings": "1.5.0",
-    "nan": "2.14.0",
-    "prebuild-install": "5.3.5"
+  "devDependencies": {
+    "nan": "2.14.0"
   },
   "scripts": {
-    "install": "prebuild-install --force || node-gyp rebuild",
+    "install": "npx prebuild-install --force || node-gyp rebuild",
     "test": "node ./test/test_binding.js"
   },
   "gypfile": true,
