@@ -1,4 +1,5 @@
-#include <nan.h>
+#include <napi.h>
+#include <uv.h>
 
 #define INITGUID
 #include <cfgmgr32.h>
@@ -228,34 +229,17 @@ bool IsConnected(const SP_DEVINFO_DATA& devInfo, bool* hasProblem)
     return ret == CR_SUCCESS;
 }
 
-#define PROP_STRING(obj, type, name, value) \
-        do \
-        { \
-           v8::Local<v8::String> prop_name = Nan::New<v8::String>(name).ToLocalChecked(); \
-           v8::Local<type> prop_value = Nan::New<type>(value).ToLocalChecked(); \
-           Nan::Set(obj, prop_name, prop_value); \
-        } while(0)
-
-
-#define PROP(obj, type, name, value) \
-        do \
-        { \
-           v8::Local<v8::String> prop_name = Nan::New<v8::String>(name).ToLocalChecked(); \
-           v8::Local<type> prop_value = Nan::New<type>(value); \
-           Nan::Set(obj, prop_name, prop_value); \
-        } while(0)
-
-NAN_METHOD(list)
+Napi::Value list(const Napi::CallbackInfo& info)
 {
-    v8::Local<v8::Array> radioList = Nan::New<v8::Array>();
+    Napi::Env env = info.Env();
+    Napi::Array radioList = Napi::Array::New(env);
     int radioIndex = 0;
     HDEVINFO hDevInfo = SetupDiGetClassDevsEx(&GUID_BTHPORT_DEVICE_INTERFACE, nullptr, nullptr,
                                               DIGCF_DEVICEINTERFACE, nullptr, nullptr, nullptr);
     if (hDevInfo == INVALID_HANDLE_VALUE)
     {
         printf("SetupDiGetClassDevsEx failed with error %d\n", GetLastError());
-        info.GetReturnValue().Set(radioList);
-        return;
+        return radioList;
     }
     SP_DEVINFO_DATA devInfo;
     devInfo.cbSize = sizeof(devInfo);
@@ -266,23 +250,25 @@ NAN_METHOD(list)
         std::string name = GetProperty(hDevInfo, &devInfo, SPDRP_DEVICEDESC);
         std::string manufacturer = GetProperty(hDevInfo, &devInfo, SPDRP_MFG);
         bool isBLECapable = IsBLECapable(hDevInfo, &devInfo);
-        v8::Local<v8::Object> adapter = Nan::New<v8::Object>();
-        PROP_STRING(adapter, v8::String, "name", name);
-        PROP_STRING(adapter, v8::String, "manufacturer", manufacturer);
-        PROP(adapter, v8::Boolean, "bleCapable", isBLECapable);
-        PROP(adapter, v8::Boolean, "isConnected", isConnected);
-        PROP(adapter, v8::Boolean, "hasProblem", hasProblem);
-        Nan::Set(radioList, radioIndex, adapter);
+        Napi::Object adapter = Napi::Object::New(env);
+        adapter.Set("name", name);
+        adapter.Set("manufacturer", manufacturer);
+        adapter.Set("bleCapable", isBLECapable);
+        adapter.Set("isConnected", isConnected);
+        adapter.Set("hasProblem", hasProblem);
+        (radioList).Set(radioIndex, adapter);
         radioIndex++;
     }
     // clean up the device information set
     SetupDiDestroyDeviceInfoList(hDevInfo);
-    info.GetReturnValue().Set(radioList);
+    return radioList;
 }
 
-NAN_MODULE_INIT(Init) 
-{
-  NAN_EXPORT(target, list);
+
+Napi::Object Init(Napi::Env env, Napi::Object exports) {
+    exports.Set(Napi::String::New(env, "list"),
+        Napi::Function::New(env, list));
+    return exports;
 }
 
-NODE_MODULE(method, Init);
+NODE_API_MODULE(method, Init);
