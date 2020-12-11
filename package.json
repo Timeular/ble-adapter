@@ -4,8 +4,11 @@
     "nan": "2.14.0"
   },
   "scripts": {
-    "install": "npx prebuild-install --force || node-gyp rebuild",
+    "install": "npx prebuild-install --force --runtime napi || node-gyp rebuild",
     "test": "node ./test/test_binding.js"
+  },
+  "binary": {
+    "napi_versions": [3]
   },
   "gypfile": true,
   "name": "ble-adapter",

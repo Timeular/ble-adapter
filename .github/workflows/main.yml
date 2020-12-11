@@ -33,6 +33,6 @@ jobs:
       # Runs a set of commands using the runners shell
       - name: Run a multi-line script
         run: |
-          npx prebuild -t 11.15.0 -t 12.7.0 -t 13.0.0 -t 14.0.0 -r node --arch=ia32
-          npx prebuild -t 11.15.0 -t 12.7.0 -t 13.0.0 -t 14.0.0 -r node --arch=x64
+          npx prebuild --runtime napi --arch=ia32 --upload ${{ secrets.GITHUB_TOKEN }}
+          npx prebuild --runtime napi --arch=x64 --upload ${{ secrets.GITHUB_TOKEN }}
           echo test, and deploy your project.
